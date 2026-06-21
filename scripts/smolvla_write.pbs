@@ -1,0 +1,34 @@
+#!/bin/bash
+# === 本番学習: SmolVLA を数字データでファインチューニング ===
+#PBS -N smolvla_write
+#PBS -q short-g
+#PBS -W group_list=gw13
+#PBS -l select=1
+#PBS -l walltime=06:00:00
+#PBS -j oe
+
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+source config.env
+module load "${APPTAINER_MODULE}"
+
+# 自分のDLキャッシュ（00_download.sh と同じ・共有下の書き込み可能領域）
+export HF_HOME="${USER_DIR}/hf_home"
+export APPTAINERENV_HF_HOME="$HF_HOME"
+export WANDB_MODE=offline          # キー無しでも落ちないように（あとで wandb sync 可）
+
+# コンテナに無い追加パッケージ（num2words 等）を読ませる
+export APPTAINERENV_PYTHONPATH="${USER_DIR}/pylibs"
+
+# コンテナ内で /work は既定読み取り専用。共有領域を書き込み可能でバインド
+apptainer exec --nv --bind "$SHARED_DIR" "${APPTAINER_IMAGE}" \
+  lerobot-train \
+    --dataset.repo_id=k1000dai/so101-write \
+    --policy.path="$USER_DIR/smolvla_base_2cam" \
+    --policy.device=cuda \
+    --batch_size=4 \
+    --steps=20000 \
+    --save_freq=2000 \
+    --output_dir="$OUTPUT_DIR/smolvla_write" \
+    --job_name=smolvla_write \
+    --wandb.enable=true --wandb.mode=offline --wandb.project="$WANDB_PROJECT" \
+    --policy.push_to_hub=false

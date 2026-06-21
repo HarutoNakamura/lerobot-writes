@@ -1,0 +1,6 @@
+# 学習済みの大容量重み（GitHub 100MB制限超）— HuggingFace Hub で配布する
+*/model.safetensors
+
+# OS / エディタ
+.DS_Store
+Thumbs.db
