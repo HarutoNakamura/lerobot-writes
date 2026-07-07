@@ -12,12 +12,15 @@
 | `lerobot-write/` | ベースライン学習のチェックポイント（config・前後処理。**重みは下記HFを参照**） |
 | `lerobot-write-aug/` | 画像オーグメンテーション有りで学習したチェックポイント |
 | `scripts/` | Miyabi(GH200) 上での学習スクリプト一式（DL / 2カメラ化 / 学習 PBS）と日本語まとめ |
+| `inference/` | **進行度リアルタイム表示**の推論一式（どのPCでも動く配布用。[`inference/README_ja.md`](inference/README_ja.md) 参照） |
 
 `model.safetensors`（各 ~865MB）は GitHub の 100MB 制限を超えるため**リポジトリには含めず**、
 Hugging Face Hub で配布しています:
 
 - ベースライン: <https://huggingface.co/HarutoNakamura/lerobot-write>
 - aug 版:        <https://huggingface.co/HarutoNakamura/lerobot-write-aug>
+- 進行度推定（別建て ResNet18）: <https://huggingface.co/HarutoNakamura/so101-write-progress>
+- 書字+進行度（SmolVLA 統合・7次元action）: <https://huggingface.co/HarutoNakamura/lerobot-write-prog>
 
 ## 概要
 
