@@ -44,8 +44,14 @@ pixi run robot-prog --digit 3 --port /dev/ttyACM0 --cam_top 0 --cam_wrist 1   # 
 pixi run robot-prog-60k --digit 3 --port /dev/ttyACM0                         # ④' 60k版
 pixi run dataset-prog --episode 9          # ④の実機なし確認（要 HF ログイン）
 
-# どのタスクも --save_dir を足すと録画される（保存先: inference/records/、詳細は後述）
-pixi run robot-prog --digit 3 --port /dev/ttyACM0 --save_dir records
+# どのタスクも --save_dir を足すと録画され（保存先: inference/records/）、
+# --hf_repo を足すと終了時に HF の dataset リポジトリへ自動アップロードされる（要 HF ログイン。詳細は後述）
+pixi run camera --digit 3 --cam 0                --save_dir records --hf_repo HarutoNakamura/so101-run-logs
+pixi run dataset --episode 9                     --save_dir records --hf_repo HarutoNakamura/so101-run-logs
+pixi run robot --digit 3 --port /dev/ttyACM0     --save_dir records --hf_repo HarutoNakamura/so101-run-logs
+pixi run robot-prog --digit 3 --port /dev/ttyACM0 --save_dir records --hf_repo HarutoNakamura/so101-run-logs
+pixi run robot-prog-60k --digit 3 --port /dev/ttyACM0 --save_dir records --hf_repo HarutoNakamura/so101-run-logs
+pixi run dataset-prog --episode 9                --save_dir records --hf_repo HarutoNakamura/so101-run-logs
 ```
 
 ## デバイス設定（コード書き換え不要）
