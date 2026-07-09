@@ -96,7 +96,8 @@ def mode_camera(args, est):
 
 def make_robot(port="/dev/ttyACM0", cam_top=0, cam_wrist=1):
     """SO-101 実機接続。ポート/カメラは引数で指定（Windows は port="COM5" など）"""
-    from lerobot.robots.so101_follower import SO101Follower, SO101FollowerConfig
+    # lerobot v0.5系でモジュール名が so101_follower → so_follower に変更された
+    from lerobot.robots.so_follower import SO101Follower, SO101FollowerConfig
     from lerobot.cameras.opencv import OpenCVCameraConfig
 
     cfg = SO101FollowerConfig(
