@@ -7,7 +7,8 @@ SO-101 に数字を書かせながら「いま何%まで書き上がったか」
 |---|---|---|
 | 書字ポリシー（ベースライン） | [`HarutoNakamura/lerobot-write`](https://huggingface.co/HarutoNakamura/lerobot-write) | SmolVLA |
 | 進行度推定（別建て） | [`HarutoNakamura/so101-write-progress`](https://huggingface.co/HarutoNakamura/so101-write-progress) | ResNet18 回帰 |
-| 書字+進行度（統合） | [`HarutoNakamura/lerobot-write-prog`](https://huggingface.co/HarutoNakamura/lerobot-write-prog) | SmolVLA 7次元action |
+| 書字+進行度（統合・20k step） | [`HarutoNakamura/lerobot-write-prog`](https://huggingface.co/HarutoNakamura/lerobot-write-prog) | SmolVLA 7次元action |
+| 書字+進行度（統合・**60k step**） | [`HarutoNakamura/lerobot-write-prog-60k`](https://huggingface.co/HarutoNakamura/lerobot-write-prog-60k) | 同上・学習量3倍（progress MAE 0.027） |
 
 ## セットアップ（新しいPCでやること）
 
@@ -33,6 +34,20 @@ hf download HarutoNakamura/so101-write-progress progress_net.pt --local-dir .
 
 カメラの視点（俯瞰 top / 手首 wrist）は**学習データ収集時と同じ配置**にすること。
 
+解像度や fps まで変えたい場合のみ `realtime_progress.py` の `make_robot()` を編集する
+（統合版 `realtime_smolvla_prog.py` もこの関数を使う）:
+
+```python
+def make_robot(port="/dev/ttyACM0", cam_top=0, cam_wrist=1):
+    cfg = SO101FollowerConfig(
+        port=port,   # ← --port 引数がここに入る
+        cameras={
+            "top":   OpenCVCameraConfig(index_or_path=cam_top,   width=848, height=480, fps=30),
+            "wrist": OpenCVCameraConfig(index_or_path=cam_wrist, width=640, height=480, fps=30),
+        },
+    )
+```
+
 ## 動かし方
 
 ### 実機なしの動作確認
@@ -55,6 +70,14 @@ python realtime_progress.py robot --ckpt progress_net.pt --digit 3 \
 # ② 統合版: 1回の推論で関節指令と進行度が同時に出る（GPU推奨）
 python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog \
     --digit 3 --port COM5 --cam_top 0 --cam_wrist 1
+
+# ②' 学習量3倍の 60k 版に切り替える場合は --ckpt を変えるだけ
+python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog-60k \
+    --digit 3 --port COM5 --cam_top 0 --cam_wrist 1
+
+# ②の実機なし動作確認（派生データセット HarutoNakamura/so101-write-prog を上げてある場合）
+python realtime_smolvla_prog.py dataset --ckpt HarutoNakamura/lerobot-write-prog \
+    --repo_id HarutoNakamura/so101-write-prog --episode 9
 ```
 
 - 緑バー = 平滑化済み進行度（EMA+単調化、戻らない）、`raw ○%` = 生の推定値
