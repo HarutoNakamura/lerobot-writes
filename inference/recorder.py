@@ -84,7 +84,8 @@ def maybe_recorder(args, fps=30, **meta):
     hf_repo = getattr(args, "hf_repo", None)
     if not save_dir and not hf_repo:
         return None
-    meta.update(mode=args.mode, ema=args.ema,
-                digit=getattr(args, "digit", None))
+    # 呼び出し側が明示した meta (dataset モードの digit 等) を優先する
+    meta = {"mode": args.mode, "ema": args.ema,
+            "digit": getattr(args, "digit", None), **meta}
     return SessionRecorder(save_dir or "records", fps=fps, meta=meta,
                            hf_repo=hf_repo)

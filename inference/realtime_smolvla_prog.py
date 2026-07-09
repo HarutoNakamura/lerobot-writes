@@ -38,7 +38,7 @@ def mode_dataset(args, policy, preproc, postproc):
     digit = task_to_digit(ds[0]["task"])
     fps = int(getattr(ds.meta, "fps", 30))
     rec = maybe_recorder(args, fps=fps, ckpt=args.ckpt,
-                         repo_id=args.repo_id, episode=args.episode)
+                         repo_id=args.repo_id, episode=args.episode, digit=digit)
     policy.reset()
     smoother = ProgressSmoother(ema=args.ema)
     try:

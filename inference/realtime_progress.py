@@ -39,7 +39,8 @@ def mode_dataset(args, est):
     ds = LeRobotDataset(args.repo_id, root=args.root, episodes=[args.episode])
     digit = task_to_digit(ds[0]["task"])
     fps = int(getattr(ds.meta, "fps", 30))
-    rec = maybe_recorder(args, fps=fps, repo_id=args.repo_id, episode=args.episode)
+    rec = maybe_recorder(args, fps=fps, repo_id=args.repo_id,
+                         episode=args.episode, digit=digit)
     est.reset()
     try:
         for i in range(len(ds)):
