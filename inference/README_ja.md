@@ -107,7 +107,9 @@ python realtime_smolvla_prog.py dataset --ckpt HarutoNakamura/lerobot-write-prog
 ## 実行履歴の保存と Hugging Face アップロード
 
 `--save_dir` を付けると、表示と同じ映像（進捗バー重畳済み）と進行度の推移が保存される。
-全モード（dataset / camera / robot、①②とも）で使える:
+全モード（dataset / camera / robot、①②とも）で使える。pixi タスクにもそのまま
+追記できる（例: `pixi run robot-prog --digit 3 --port /dev/ttyACM0 --save_dir records`。
+この場合の保存先は `inference/records/`）:
 
 ```bash
 # ローカル保存のみ

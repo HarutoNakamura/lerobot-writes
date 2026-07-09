@@ -6,6 +6,9 @@ inference/progress_net.pt
 .pixi/
 __pycache__/
 
+# 実行履歴の録画 (--save_dir の既定出力先)
+records/
+
 # OS / エディタ
 .DS_Store
 Thumbs.db
