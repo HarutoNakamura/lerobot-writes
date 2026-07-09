@@ -25,6 +25,26 @@ pip install -r requirements.txt        # Python 3.10+ / venv や conda 推奨
 hf download HarutoNakamura/so101-write-progress progress_net.pt --local-dir .
 ```
 
+### pixi で動かす場合（推奨・再現性あり）
+
+リポジトリ直下の `pixi.toml` に環境とタスクを定義してある。
+[pixi](https://pixi.sh) を入れて `pixi install` するだけで、ffmpeg や
+opencv-python-headless の競合対策込みの環境が入る。
+
+```bash
+cd lerobot-writes
+pixi install          # 環境構築（初回のみ）
+pixi run get-ckpt     # progress_net.pt を先に落とす（別建て版用）
+
+# 4つの実行方法（引数はそのまま後ろに足せる）
+pixi run camera --digit 3 --cam 0          # ① Webカメラで動作確認
+pixi run dataset --episode 9               # ② 学習データ再生で確認
+pixi run robot --digit 3 --port /dev/ttyACM0 --cam_top 0 --cam_wrist 1        # ③ 実機・別建て版
+pixi run robot-prog --digit 3 --port /dev/ttyACM0 --cam_top 0 --cam_wrist 1   # ④ 実機・統合版
+pixi run robot-prog-60k --digit 3 --port /dev/ttyACM0                         # ④' 60k版
+pixi run dataset-prog --episode 9          # ④の実機なし確認（要 HF ログイン）
+```
+
 ## デバイス設定（コード書き換え不要）
 
 実機のポートとカメラ番号は**引数で指定**する:
@@ -83,6 +103,33 @@ python realtime_smolvla_prog.py dataset --ckpt HarutoNakamura/lerobot-write-prog
 - 緑バー = 平滑化済み進行度（EMA+単調化、戻らない）、`raw ○%` = 生の推定値
 - 1枚書かせるごとにスクリプトを起動し直す（起動時にポリシーと進行度がリセットされる）
 - ProgressNet(①の進行度側) は CPU で十分。SmolVLA を回す部分は GPU 推奨
+
+## 実行履歴の保存と Hugging Face アップロード
+
+`--save_dir` を付けると、表示と同じ映像（進捗バー重畳済み）と進行度の推移が保存される。
+全モード（dataset / camera / robot、①②とも）で使える:
+
+```bash
+# ローカル保存のみ
+python realtime_progress.py robot --ckpt progress_net.pt --digit 3 \
+    --policy HarutoNakamura/lerobot-write --port COM5 --cam_top 0 --cam_wrist 1 \
+    --save_dir records
+
+# さらに終了時に HF の dataset リポジトリへ自動アップロード（要 hf auth login）
+python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog \
+    --digit 3 --port COM5 --cam_top 0 --cam_wrist 1 \
+    --save_dir records --hf_repo HarutoNakamura/so101-run-logs
+```
+
+保存先は `<save_dir>/<実行日時>/` で、中身は3ファイル:
+
+- `video.mp4` — 進捗バー重畳済みの top カメラ映像
+- `progress.csv` — frame, time_sec, raw, smoothed（camera モードの r リセットは event 列に記録）
+- `meta.json` — 実行時の条件（mode / digit / ckpt / port / ema など）
+
+`--hf_repo` のみ指定した場合はローカル `records/` に保存してからアップロードする。
+リポジトリは private の dataset として自動作成され、実行日時ごとのフォルダに積み上がる。
+アップロードに失敗してもローカルのデータは残る。
 
 ## 自作コードへの組み込み
 

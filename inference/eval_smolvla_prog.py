@@ -31,7 +31,12 @@ def load_policy(ckpt: str, device: str):
     from lerobot.policies.factory import make_pre_post_processors
 
     policy = SmolVLAPolicy.from_pretrained(ckpt).to(device).eval()
-    preproc, postproc = make_pre_post_processors(policy.config, pretrained_path=ckpt)
+    # チェックポイントには学習時のデバイス (cuda) が焼き込まれているので、
+    # 実行環境のデバイスで上書きする (CPU のみのPCでも動くように)
+    preproc, postproc = make_pre_post_processors(
+        policy.config, pretrained_path=ckpt,
+        preprocessor_overrides={"device_processor": {"device": device}},
+    )
     return policy, preproc, postproc
 
 

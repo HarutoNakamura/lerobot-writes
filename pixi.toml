@@ -1,0 +1,68 @@
+# Pixi manifest for lerobot-writes inference (progress-bar display for SO-101 digit writing).
+# Mirrors the pinned setup in ~/lerobot/pixi.toml (lecture env) — see comments there for details.
+[workspace]
+name = "lerobot-writes"
+version = "0.1.0"
+description = "SO-101 digit-writing inference with realtime progress display, managed with pixi"
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "linux-64"]
+
+# rerun-sdk (pulled in by lerobot) only ships manylinux_2_31 wheels.
+[system-requirements]
+libc = "2.31"
+
+# Old system libstdc++ (Ubuntu 20.04) lacks GLIBCXX symbols needed by the env's
+# ffmpeg stack; preload the env's own newer libstdc++ so torchcodec loads.
+[target.linux-64.activation.env]
+LD_PRELOAD = "$CONDA_PREFIX/lib/libstdc++.so.6"
+
+[dependencies]
+python = "3.12.*"
+# torchcodec supports ffmpeg 4-7 only; conda-forge ffmpeg 8 fails to load.
+ffmpeg = ">=7.0,<8"
+packaging = "<26"        # lerobot needs packaging<26
+setuptools = ">=71,<81"  # lerobot needs setuptools>=71,<81
+pip = "*"
+
+[pypi-dependencies]
+# feetech: SO-101 follower (realtime_progress.py robot / realtime_smolvla_prog.py robot)
+# smolvla: SmolVLAPolicy (transformers, num2words, accelerate, ...)
+lerobot = { version = "==0.5.1", extras = ["feetech", "smolvla"] }
+# Match the headless major version below so cv2 APIs stay consistent.
+opencv-python = ">=4.13,<4.14"
+matplotlib = "*"
+
+# lerobot depends on opencv-python-headless, whose cv2 package clobbers the GUI
+# build above and breaks cv2.imshow. Restrict it to a platform that never
+# matches so only the GUI opencv-python is installed.
+[pypi-options.dependency-overrides]
+opencv-python-headless = { version = "*", env-markers = "sys_platform == 'never'" }
+
+# --- Tasks (run with `pixi run <name>`; extra args are appended) -------------
+# All tasks run inside inference/ so relative paths like progress_net.pt work.
+[tasks]
+verify = { cmd = "python -c \"import lerobot, cv2, matplotlib, scservo_sdk; from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy; print('lerobot', lerobot.__version__, '| smolvla + feetech OK')\"" }
+hf-login = "hf auth login"
+# Pre-download the ResNet18 progress-net weights used by the separate-model variant.
+get-ckpt = { cmd = "hf download HarutoNakamura/so101-write-progress progress_net.pt --local-dir .", cwd = "inference" }
+
+# 1) Webcam-only check of the progress bar (r=reset, q=quit).
+#    usage: pixi run camera --digit 3 --cam 0
+camera = { cmd = "python realtime_progress.py camera --ckpt progress_net.pt", cwd = "inference" }
+
+# 2) Replay a training episode (first run downloads k1000dai/so101-write, a few GB).
+#    usage: pixi run dataset --episode 9
+dataset = { cmd = "python realtime_progress.py dataset --ckpt progress_net.pt", cwd = "inference" }
+
+# 3) Real robot, separate models: baseline SmolVLA writes, ResNet18 estimates progress.
+#    usage: pixi run robot --digit 3 --port /dev/ttyACM0 --cam_top 0 --cam_wrist 1
+robot = { cmd = "python realtime_progress.py robot --ckpt progress_net.pt --policy HarutoNakamura/lerobot-write", cwd = "inference" }
+
+# 4) Real robot, integrated model: one SmolVLA inference yields joints + progress (GPU recommended).
+#    usage: pixi run robot-prog --digit 3 --port /dev/ttyACM0 --cam_top 0 --cam_wrist 1
+#    60k-step variant: pixi run robot-prog-60k --digit 3 --port /dev/ttyACM0
+robot-prog = { cmd = "python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog", cwd = "inference" }
+robot-prog-60k = { cmd = "python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog-60k", cwd = "inference" }
+# Integrated model without a robot (needs the derived dataset on HF):
+#    usage: pixi run dataset-prog --episode 9
+dataset-prog = { cmd = "python realtime_smolvla_prog.py dataset --ckpt HarutoNakamura/lerobot-write-prog --repo_id HarutoNakamura/so101-write-prog", cwd = "inference" }

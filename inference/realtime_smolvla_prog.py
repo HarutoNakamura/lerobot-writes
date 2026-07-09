@@ -14,11 +14,15 @@
 import argparse
 import time
 
+# cv2 は torch/torchvision (経由で av) より先に import しないと cv2.imshow が
+# フリーズする (ffmpeg 同梱バージョン競合: pytorch/vision#5940, opencv#21952)
+import cv2  # noqa: F401
 import torch
 
 from progress_model import ProgressSmoother, draw_progress_bar, task_to_digit
 from eval_smolvla_prog import CAM_TOP, CAM_WRIST, load_policy, predict_step
 from realtime_progress import make_robot
+from recorder import maybe_recorder
 
 MOTORS = ("shoulder_pan", "shoulder_lift", "elbow_flex",
           "wrist_flex", "wrist_roll", "gripper")
@@ -32,20 +36,29 @@ def mode_dataset(args, policy, preproc, postproc):
 
     ds = LeRobotDataset(args.repo_id, root=args.root, episodes=[args.episode])
     digit = task_to_digit(ds[0]["task"])
+    fps = int(getattr(ds.meta, "fps", 30))
+    rec = maybe_recorder(args, fps=fps, ckpt=args.ckpt,
+                         repo_id=args.repo_id, episode=args.episode)
     policy.reset()
     smoother = ProgressSmoother(ema=args.ema)
-    for i in range(len(ds)):
-        item = ds[i]
-        _, p = predict_step(policy, preproc, postproc,
-                            item[CAM_TOP], item[CAM_WRIST],
-                            item["observation.state"], item["task"], args.device)
-        smoother.update(p)
-        bgr = (item[CAM_TOP].permute(1, 2, 0).numpy() * 255).astype(np.uint8)[:, :, ::-1].copy()
-        draw_progress_bar(bgr, smoother.smoothed, digit=digit, raw=p)
-        cv2.imshow("progress (integrated)", bgr)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            break
-    cv2.destroyAllWindows()
+    try:
+        for i in range(len(ds)):
+            item = ds[i]
+            _, p = predict_step(policy, preproc, postproc,
+                                item[CAM_TOP], item[CAM_WRIST],
+                                item["observation.state"], item["task"], args.device)
+            smoother.update(p)
+            bgr = (item[CAM_TOP].permute(1, 2, 0).numpy() * 255).astype(np.uint8)[:, :, ::-1].copy()
+            draw_progress_bar(bgr, smoother.smoothed, digit=digit, raw=p)
+            cv2.imshow("progress (integrated)", bgr)
+            if rec:
+                rec.write(bgr, p, smoother.smoothed)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+    finally:
+        if rec:
+            rec.close()
+        cv2.destroyAllWindows()
 
 
 def mode_robot(args, policy, preproc, postproc):
@@ -55,6 +68,7 @@ def mode_robot(args, policy, preproc, postproc):
 
     robot = make_robot(args.port, args.cam_top, args.cam_wrist)
     task = f"write{args.digit}"
+    rec = maybe_recorder(args, ckpt=args.ckpt, port=args.port)
     policy.reset()
     smoother = ProgressSmoother(ema=args.ema)
     print(f"task={task}  q で終了")
@@ -74,11 +88,15 @@ def mode_robot(args, policy, preproc, postproc):
             frame = (obs["top"][:, :, ::-1]).astype(np.uint8).copy()  # RGB->BGR
             draw_progress_bar(frame, smoother.smoothed, digit=args.digit, raw=p)
             cv2.imshow("progress (integrated)", frame)
+            if rec:
+                rec.write(frame, p, smoother.smoothed)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
             # 30fps 目安のペーシング
             time.sleep(max(0.0, 1 / 30 - (time.time() - t0)))
     finally:
+        if rec:
+            rec.close()
         robot.disconnect()
         cv2.destroyAllWindows()
 
@@ -90,6 +108,11 @@ def main():
                     help="checkpoints/.../pretrained_model か HF repo id")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--ema", type=float, default=0.8)
+    ap.add_argument("--save_dir", default=None,
+                    help="指定すると映像(MP4)と進行度ログ(CSV)をこのフォルダに保存")
+    ap.add_argument("--hf_repo", default=None,
+                    help="指定すると終了時に録画一式を HF dataset リポジトリへ"
+                         "アップロード (例: HarutoNakamura/so101-run-logs)")
     # dataset モード
     ap.add_argument("--repo_id", default="local/so101-write-prog")
     ap.add_argument("--root", default=None)

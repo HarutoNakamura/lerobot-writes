@@ -1,5 +1,10 @@
 # 学習済みの大容量重み（GitHub 100MB制限超）— HuggingFace Hub で配布する
 */model.safetensors
+inference/progress_net.pt
+
+# pixi 環境と Python キャッシュ
+.pixi/
+__pycache__/
 
 # OS / エディタ
 .DS_Store
