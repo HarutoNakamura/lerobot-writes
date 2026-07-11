@@ -41,7 +41,7 @@ pixi run camera --digit 3 --cam 0          # ① Webカメラで動作確認
 pixi run dataset --episode 9               # ② 学習データ再生で確認
 pixi run robot --digit 3 --port /dev/ttyACM0 --cam_top 0 --cam_wrist 1        # ③ 実機・別建て版
 pixi run robot-prog --digit 3 --port /dev/ttyACM0 --cam_top 0 --cam_wrist 1   # ④ 実機・統合版
-pixi run robot-prog-60k --digit 3 --port /dev/ttyACM0                         # ④' 60k版
+pixi run robot-prog-60k --digit 3 --port /dev/ttyACM0                         # ④' 60k版（別建て版も並走・自動録画。要 get-ckpt 済み）
 pixi run dataset-prog --episode 9          # ④の実機なし確認（要 HF ログイン）
 
 # どのタスクも --save_dir を足すと録画され（保存先: inference/records/）、
@@ -104,7 +104,16 @@ python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog \
 python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog-60k \
     --digit 3 --port COM5 --cam_top 0 --cam_wrist 1
 
-# ②の実機なし動作確認（派生データセット HarutoNakamura/so101-write-prog を上げてある場合）
+# ②'' 60k 版と別建て版の同時実行・比較: --prog_ckpt で ProgressNet を並走させる。
+#      緑バー=[VLA] 統合版 / 橙バー=[ResNet] 別建て版 の2本が表示され、
+#      --save_dir を付けると両方の値が progress.csv に記録される
+#      （pixi run robot-prog-60k はこれが既定。progress_net.pt は先に落としておく）
+python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog-60k \
+    --digit 3 --port COM5 --cam_top 0 --cam_wrist 1 \
+    --prog_ckpt progress_net.pt --save_dir records
+
+# ②の実機なし動作確認（派生データセット HarutoNakamura/so101-write-prog を上げてある場合。
+#   --prog_ckpt / --save_dir はここでも併用できる）
 python realtime_smolvla_prog.py dataset --ckpt HarutoNakamura/lerobot-write-prog \
     --repo_id HarutoNakamura/so101-write-prog --episode 9
 ```
@@ -134,9 +143,12 @@ python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog \
 
 保存先は `<save_dir>/<実行日時>/` で、中身は3ファイル:
 
-- `video.mp4` — 進捗バー重畳済みの top カメラ映像
-- `progress.csv` — frame, time_sec, raw, smoothed（camera モードの r リセットは event 列に記録）
-- `meta.json` — 実行時の条件（mode / digit / ckpt / port / ema など）
+- `video.mp4` — 進捗バー重畳済みの top カメラ映像（並走時は2本のバー入り）
+- `progress.csv` — frame, time_sec, raw, smoothed, sep_raw, sep_smoothed, event。
+  raw/smoothed は統合版（②で `--prog_ckpt` 未指定なら唯一の系列）、
+  sep_* は `--prog_ckpt` で並走させた別建て ProgressNet の値（未使用時は空欄）。
+  camera モードの r リセットは event 列に記録される
+- `meta.json` — 実行時の条件（mode / digit / ckpt / prog_ckpt / port / ema など）
 
 `--hf_repo` のみ指定した場合はローカル `records/` に保存してからアップロードする。
 リポジトリは private の dataset として自動作成され、実行日時ごとのフォルダに積み上がる。

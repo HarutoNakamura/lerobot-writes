@@ -6,7 +6,8 @@ realtime_smolvla_prog.py の全モードから使う。
 
 保存先: <save_dir>/<YYYYmmdd_HHMMSS>/
   video.mp4     進捗バー重畳済みのカメラ映像
-  progress.csv  frame, time_sec, raw, smoothed (+ event 列に reset 等)
+  progress.csv  frame, time_sec, raw, smoothed, sep_raw, sep_smoothed, event
+                (sep_* は統合版と別建て ProgressNet を並走させた場合のみ入る)
   meta.json     実行時の引数・fps・開始時刻
 
 --hf_repo を指定すると close 時に同じフォルダ構成のまま Hugging Face の
@@ -32,27 +33,35 @@ class SessionRecorder:
         self._n = 0
         self._csv_f = open(self.dir / "progress.csv", "w", newline="")
         self._csv = csv.writer(self._csv_f)
-        self._csv.writerow(["frame", "time_sec", "raw", "smoothed", "event"])
+        self._csv.writerow(["frame", "time_sec", "raw", "smoothed",
+                            "sep_raw", "sep_smoothed", "event"])
         with open(self.dir / "meta.json", "w") as f:
             json.dump({"started": datetime.now().isoformat(), "fps": fps,
                        **(meta or {})}, f, ensure_ascii=False, indent=2)
         print(f"録画開始: {self.dir}")
 
-    def write(self, frame_bgr, raw, smoothed, event=""):
-        """表示直前/直後のオーバーレイ済み BGR フレームと進行度を1件記録"""
+    def write(self, frame_bgr, raw, smoothed, event="",
+              sep_raw=None, sep_smoothed=None):
+        """表示直前/直後のオーバーレイ済み BGR フレームと進行度を1件記録。
+
+        sep_raw / sep_smoothed には別建て ProgressNet を並走させたときの値を渡す。
+        """
         if self._writer is None:
             h, w = frame_bgr.shape[:2]
             self._writer = cv2.VideoWriter(
                 str(self.dir / "video.mp4"),
                 cv2.VideoWriter_fourcc(*"mp4v"), self.fps, (w, h))
         self._writer.write(frame_bgr)
+        fmt = lambda v: "" if v is None else f"{float(v):.4f}"
         self._csv.writerow([self._n, f"{time.time() - self._t0:.3f}",
-                            f"{float(raw):.4f}", f"{float(smoothed):.4f}", event])
+                            fmt(raw), fmt(smoothed),
+                            fmt(sep_raw), fmt(sep_smoothed), event])
         self._n += 1
 
     def mark(self, event):
         """フレームを伴わないイベント (進行度リセット等) を記録"""
-        self._csv.writerow([self._n, f"{time.time() - self._t0:.3f}", "", "", event])
+        self._csv.writerow([self._n, f"{time.time() - self._t0:.3f}",
+                            "", "", "", "", event])
 
     def close(self):
         if self._writer is not None:

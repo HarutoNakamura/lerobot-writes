@@ -60,9 +60,12 @@ robot = { cmd = "python realtime_progress.py robot --ckpt progress_net.pt --poli
 
 # 4) Real robot, integrated model: one SmolVLA inference yields joints + progress (GPU recommended).
 #    usage: pixi run robot-prog --digit 3 --port /dev/ttyACM0 --cam_top 0 --cam_wrist 1
-#    60k-step variant: pixi run robot-prog-60k --digit 3 --port /dev/ttyACM0
+#    The 60k variant also runs the separate ProgressNet side by side (two bars:
+#    green=VLA, orange=ResNet) and records both to inference/records/.
+#    Needs progress_net.pt first: pixi run get-ckpt
+#    usage: pixi run robot-prog-60k --digit 3 --port /dev/ttyACM0
 robot-prog = { cmd = "python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog", cwd = "inference" }
-robot-prog-60k = { cmd = "python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog-60k", cwd = "inference" }
+robot-prog-60k = { cmd = "python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog-60k --prog_ckpt progress_net.pt --save_dir records", cwd = "inference" }
 # Integrated model without a robot (needs the derived dataset on HF):
 #    usage: pixi run dataset-prog --episode 9
 dataset-prog = { cmd = "python realtime_smolvla_prog.py dataset --ckpt HarutoNakamura/lerobot-write-prog --repo_id HarutoNakamura/so101-write-prog", cwd = "inference" }

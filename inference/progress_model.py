@@ -123,21 +123,29 @@ class ProgressEstimator:
         return p
 
 
-def draw_progress_bar(frame, progress: float, digit=None, raw=None):
-    """OpenCV BGR フレーム下部に進捗バーを描画して返す（フレームは書き換えられる）"""
+def draw_progress_bar(frame, progress: float, digit=None, raw=None,
+                      slot=0, color=(80, 200, 80), name=None):
+    """OpenCV BGR フレーム下部に進捗バーを描画して返す（フレームは書き換えられる）。
+
+    slot=1 で1段上に描く（統合版と別建て版を同時表示するときの2本目用）。
+    name はバーの識別ラベル（例 "VLA", "ResNet"）。
+    """
     import cv2
     h, w = frame.shape[:2]
     bar_h = max(18, h // 20)
-    y0, y1 = h - bar_h - 8, h - 8
+    y1 = h - 8 - slot * (bar_h + 28)  # ラベル分の余白も空けて積む
+    y0 = y1 - bar_h
     x0, x1 = 8, w - 8
     cv2.rectangle(frame, (x0, y0), (x1, y1), (60, 60, 60), -1)
     fill = x0 + int((x1 - x0) * max(0.0, min(1.0, progress)))
-    cv2.rectangle(frame, (x0, y0), (fill, y1), (80, 200, 80), -1)
+    cv2.rectangle(frame, (x0, y0), (fill, y1), color, -1)
     label = f"{progress * 100:5.1f}%"
     if raw is not None:
         label += f" (raw {raw * 100:4.0f}%)"
     if digit is not None:
         label = f"write{digit}: " + label
+    if name is not None:
+        label = f"[{name}] " + label
     cv2.putText(frame, label, (x0 + 6, y0 - 6),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
     return frame
