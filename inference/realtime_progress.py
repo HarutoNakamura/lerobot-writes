@@ -169,6 +169,10 @@ def main():
     ap.add_argument("--ckpt", required=True, help="progress_net.pt のパス")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--ema", type=float, default=0.8, help="表示平滑化 (0で平滑化なし)")
+    ap.add_argument("--zero_start", type=int, default=0,
+                    help="最初のNフレームの中央値を 0%% に再基準化 (0で無効)。"
+                         "学習データと違う環境では白紙でも 0.3 前後を出すため、"
+                         "実機では 15 程度を推奨")
     ap.add_argument("--save_dir", default=None,
                     help="指定すると映像(MP4)と進行度ログ(CSV)をこのフォルダに保存")
     ap.add_argument("--hf_repo", default=None,
@@ -189,7 +193,8 @@ def main():
     ap.add_argument("--cam_wrist", type=int, default=1, help="wristカメラの番号")
     args = ap.parse_args()
 
-    est = ProgressEstimator(args.ckpt, device=args.device, ema=args.ema)
+    est = ProgressEstimator(args.ckpt, device=args.device, ema=args.ema,
+                            zero_start=args.zero_start)
     {"dataset": mode_dataset, "camera": mode_camera, "robot": mode_robot}[args.mode](args, est)
 
 

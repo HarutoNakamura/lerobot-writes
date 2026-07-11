@@ -26,7 +26,7 @@ import time
 import cv2  # noqa: F401
 import torch
 
-from progress_model import (ProgressEstimator, ProgressSmoother,
+from progress_model import (ChunkedSmoother, ProgressEstimator,
                             draw_progress_bar, task_to_digit)
 from eval_smolvla_prog import CAM_TOP, CAM_WRIST, load_policy, predict_step
 from realtime_progress import make_robot
@@ -60,7 +60,7 @@ def mode_dataset(args, policy, preproc, postproc, est=None):
     policy.reset()
     if est:
         est.reset()
-    smoother = ProgressSmoother(ema=args.ema)
+    smoother = ChunkedSmoother(ema=args.ema)  # チャンク先読みの上振れを表示しない
     try:
         for i in range(len(ds)):
             item = ds[i]
@@ -95,7 +95,7 @@ def mode_robot(args, policy, preproc, postproc, est=None):
     policy.reset()
     if est:
         est.reset()
-    smoother = ProgressSmoother(ema=args.ema)
+    smoother = ChunkedSmoother(ema=args.ema)  # チャンク先読みの上振れを表示しない
     print(f"task={task}  q で終了")
     try:
         while True:
@@ -140,6 +140,10 @@ def main():
                          "統合版と同時に推定して2本のバーで比較表示し、録画時は"
                          "CSV の sep_raw/sep_smoothed 列にも記録する"
                          "（先に pixi run get-ckpt などで取得しておく）")
+    ap.add_argument("--zero_start", type=int, default=15,
+                    help="別建て ProgressNet の開始キャリブレーション: 最初のNフレームの"
+                         "中央値を 0%% に再基準化 (0で無効)。初見環境では白紙でも"
+                         "0.3前後を出すため既定で有効")
     ap.add_argument("--save_dir", default=None,
                     help="指定すると映像(MP4)と進行度ログ(CSV)をこのフォルダに保存")
     ap.add_argument("--hf_repo", default=None,
@@ -159,8 +163,8 @@ def main():
 
     policy, preproc, postproc = load_policy(args.ckpt, args.device)
     # 別建て版の並走 (ProgressNet は軽いので同じ device に同居できる)
-    est = ProgressEstimator(args.prog_ckpt, device=args.device,
-                            ema=args.ema) if args.prog_ckpt else None
+    est = ProgressEstimator(args.prog_ckpt, device=args.device, ema=args.ema,
+                            zero_start=args.zero_start) if args.prog_ckpt else None
     if args.mode == "dataset":
         mode_dataset(args, policy, preproc, postproc, est)
     else:

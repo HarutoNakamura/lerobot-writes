@@ -118,7 +118,13 @@ python realtime_smolvla_prog.py dataset --ckpt HarutoNakamura/lerobot-write-prog
     --repo_id HarutoNakamura/so101-write-prog --episode 9
 ```
 
-- 緑バー = 平滑化済み進行度（EMA+単調化、戻らない）、`raw ○%` = 生の推定値
+- 緑バー = 平滑化済み進行度、`raw ○%` = 生の推定値。①は EMA+単調化（戻らない）。
+  ②の統合版は action チャンク内で未来の progress を先読みして上振れするため、
+  再推論による下方修正の直後の値を「現在地」とみなす ChunkedSmoother で表示する
+  （単調ホールドなし。書けていないのに 100% に張り付くのを防ぐ）
+- 別建て版は学習データと違う環境だと白紙でも 0.3 前後を出す（平均回帰）。
+  ②の並走時は `--zero_start 15`（既定）で開始時の値を 0% に再基準化する。
+  ①でも `--zero_start 15` を付ければ同じ補正が効く（既定は無効）
 - 1枚書かせるごとにスクリプトを起動し直す（起動時にポリシーと進行度がリセットされる）
 - ProgressNet(①の進行度側) は CPU で十分。SmolVLA を回す部分は GPU 推奨
 

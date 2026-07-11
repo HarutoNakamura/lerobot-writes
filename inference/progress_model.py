@@ -88,18 +88,58 @@ class ProgressSmoother:
         return self.smoothed
 
 
+class ChunkedSmoother:
+    """アクションチャンクで先読みする統合版 progress の表示用平滑化。
+
+    統合版の7次元目はチャンク内では「未来の progress の予測」なので、
+    チャンク実行中に上振れし、再推論のたびに下方修正される
+    (実機ログの実測: 約1.8秒周期の整数倍・平均 -0.15〜-0.25)。
+    大きな下降の直後の値を「現在地」(anchor) として採用し、チャンク内は
+    anchor+margin で頭打ちした EMA を表示する。単調ホールドはしない
+    (ピークを保持すると書けていなくても 100% に張り付くため)。
+    """
+
+    def __init__(self, ema: float = 0.8, drop: float = 0.08, margin: float = 0.08):
+        self.ema = ema
+        self.drop = drop      # これ以上の下降を再推論による修正とみなす
+        self.margin = margin  # チャンク内で anchor から先に進んでよい幅
+        self.reset()
+
+    def reset(self):
+        """エピソード開始時に呼ぶ"""
+        self.smoothed = 0.0
+        self._ema_val = None
+        self._prev = None
+        self._anchor = None
+
+    def update(self, p: float) -> float:
+        if self._prev is not None and self._prev - p >= self.drop:
+            self._anchor = p  # 再推論直後 = 観測に基づく正直な現在推定
+        self._prev = p
+        cap = 1.0 if self._anchor is None else min(1.0, self._anchor + self.margin)
+        q = min(p, cap)
+        self._ema_val = q if self._ema_val is None else \
+            self.ema * self._ema_val + (1 - self.ema) * q
+        self.smoothed = self._ema_val
+        return self.smoothed
+
+
 class ProgressEstimator:
     """実機ループ組み込み用の薄いラッパ。
 
     - estimate() は生の推定値、smoothed は EMA + 単調化（表示が暴れない）した値
     - 画像は torch float [0,1] (3,H,W) / numpy uint8 (H,W,3) RGB or BGR を受け付ける
+    - zero_start=N で最初のNフレームの中央値を 0% に再基準化する。学習データと
+      違う環境では白紙でも 0.3 前後を出す（平均回帰）ため、実機ではこれを推奨
     """
 
     def __init__(self, ckpt_path: str, device: str = "cpu", ema: float = 0.8,
-                 monotonic: bool = True):
+                 monotonic: bool = True, zero_start: int = 0):
         self.model = ProgressNet.load(ckpt_path, device)
         self.device = device
+        self.zero_start = zero_start
         self._smoother = ProgressSmoother(ema, monotonic)
+        self._baseline = []
 
     @property
     def smoothed(self) -> float:
@@ -108,6 +148,15 @@ class ProgressEstimator:
     def reset(self):
         """エピソード開始時に呼ぶ"""
         self._smoother.reset()
+        self._baseline = []
+
+    def _calibrate(self, p: float) -> float:
+        if not self.zero_start:
+            return p
+        if len(self._baseline) < self.zero_start:
+            self._baseline.append(p)
+        b = sorted(self._baseline)[len(self._baseline) // 2]  # 中央値
+        return min(1.0, max(0.0, (p - b) / max(1.0 - b, 1e-3)))
 
     @torch.no_grad()
     def estimate(self, img, digit: int, bgr: bool = False) -> float:
@@ -118,7 +167,7 @@ class ProgressEstimator:
             img = torch.from_numpy(img.copy()).permute(2, 0, 1).float() / 255.0
         img = preprocess(img.to(self.device))
         d = torch.tensor([digit], device=self.device)
-        p = float(self.model(img, d).item())
+        p = self._calibrate(float(self.model(img, d).item()))
         self._smoother.update(p)
         return p
 
