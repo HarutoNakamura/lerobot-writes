@@ -9,6 +9,11 @@ SO-101 に数字を書かせながら「いま何%まで書き上がったか」
 | 進行度推定（別建て） | [`HarutoNakamura/so101-write-progress`](https://huggingface.co/HarutoNakamura/so101-write-progress) | ResNet18 回帰 |
 | 書字+進行度（統合・20k step） | [`HarutoNakamura/lerobot-write-prog`](https://huggingface.co/HarutoNakamura/lerobot-write-prog) | SmolVLA 7次元action |
 | 書字+進行度（統合・**60k step**） | [`HarutoNakamura/lerobot-write-prog-60k`](https://huggingface.co/HarutoNakamura/lerobot-write-prog-60k) | 同上・学習量3倍（progress MAE 0.027） |
+| 進行度推定（別建て・**実環境ft**） | 同 `so101-write-progress` の `progress_net_kadokawa.pt` | kadokawa 実環境データで fine-tune。実環境ホールドアウト MAE **0.022** |
+| 書字+進行度（統合・**実環境ft**） | [`HarutoNakamura/lerobot-write-prog-ft-60k`](https://huggingface.co/HarutoNakamura/lerobot-write-prog-ft-60k) | 60k版に実環境データを混ぜて 60k step 追加学習 |
+
+実環境（kadokawa セットアップ）で動かすなら **実環境ft の2つ**を使う。
+元の学習環境・データセット再生には ft 無し版を使う。
 
 ## セットアップ（新しいPCでやること）
 
@@ -23,6 +28,8 @@ pip install -r requirements.txt        # Python 3.10+ / venv や conda 推奨
 
 ```bash
 hf download HarutoNakamura/so101-write-progress progress_net.pt --local-dir .
+# 実環境ft版を使う場合はこちらも
+hf download HarutoNakamura/so101-write-progress progress_net_kadokawa.pt --local-dir .
 ```
 
 ### pixi で動かす場合（推奨・再現性あり）
@@ -43,6 +50,12 @@ pixi run robot --digit 3 --port /dev/ttyACM0 --cam_top 0 --cam_wrist 1        # 
 pixi run robot-prog --digit 3 --port /dev/ttyACM0 --cam_top 0 --cam_wrist 1   # ④ 実機・統合版
 pixi run robot-prog-60k --digit 3 --port /dev/ttyACM0                         # ④' 60k版（別建て版も並走・自動録画。要 get-ckpt 済み）
 pixi run dataset-prog --episode 9          # ④の実機なし確認（要 HF ログイン）
+
+# 実環境(kadokawa)では引数を後ろに足して実環境ft版に差し替える
+# （タスクの引数は後勝ちなので --ckpt 等を上書きできる）
+pixi run robot-prog-60k --digit 5 --port /dev/follower_arm \
+    --ckpt HarutoNakamura/lerobot-write-prog-ft-60k \
+    --prog_ckpt progress_net_kadokawa.pt --zero_start 0
 
 # どのタスクも --save_dir を足すと録画され（保存先: inference/records/）、
 # --hf_repo を足すと終了時に HF の dataset リポジトリへ自動アップロードされる（要 HF ログイン。詳細は後述）
@@ -112,6 +125,15 @@ python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog-6
     --digit 3 --port COM5 --cam_top 0 --cam_wrist 1 \
     --prog_ckpt progress_net.pt --save_dir records
 
+# ③ 実環境（kadokawa セットアップ）では実環境ft版を使う。
+#    重みが実環境に校正済みなので --zero_start 0 で再基準化を切る
+python realtime_progress.py robot --ckpt progress_net_kadokawa.pt --digit 5 \
+    --policy HarutoNakamura/lerobot-write --port /dev/follower_arm
+
+python realtime_smolvla_prog.py robot --ckpt HarutoNakamura/lerobot-write-prog-ft-60k \
+    --digit 5 --port /dev/follower_arm \
+    --prog_ckpt progress_net_kadokawa.pt --zero_start 0 --save_dir records
+
 # ②の実機なし動作確認（派生データセット HarutoNakamura/so101-write-prog を上げてある場合。
 #   --prog_ckpt / --save_dir はここでも併用できる）
 python realtime_smolvla_prog.py dataset --ckpt HarutoNakamura/lerobot-write-prog \
@@ -124,7 +146,8 @@ python realtime_smolvla_prog.py dataset --ckpt HarutoNakamura/lerobot-write-prog
   （単調ホールドなし。書けていないのに 100% に張り付くのを防ぐ）
 - 別建て版は学習データと違う環境だと白紙でも 0.3 前後を出す（平均回帰）。
   ②の並走時は `--zero_start 15`（既定）で開始時の値を 0% に再基準化する。
-  ①でも `--zero_start 15` を付ければ同じ補正が効く（既定は無効）
+  ①でも `--zero_start 15` を付ければ同じ補正が効く（既定は無効）。
+  **実環境ft版 (`progress_net_kadokawa.pt`) は校正済みなので `--zero_start 0` にする**
 - 1枚書かせるごとにスクリプトを起動し直す（起動時にポリシーと進行度がリセットされる）
 - ProgressNet(①の進行度側) は CPU で十分。SmolVLA を回す部分は GPU 推奨
 
