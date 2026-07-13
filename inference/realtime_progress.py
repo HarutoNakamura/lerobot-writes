@@ -183,7 +183,8 @@ def main():
     ap.add_argument("--root", default=None)
     ap.add_argument("--episode", type=int, default=9)
     # camera / robot モード
-    ap.add_argument("--digit", type=int, default=3, help="書かせる数字 (0-9)")
+    ap.add_argument("--digit", type=int, default=3, choices=range(10),
+                    metavar="0-9", help="書かせる数字 (0-9)")
     ap.add_argument("--cam", type=int, default=0)
     ap.add_argument("--policy", default="HarutoNakamura/lerobot-write",
                     help="robot モードで使う SmolVLA (HF repo か checkpoints/.../pretrained_model)")
