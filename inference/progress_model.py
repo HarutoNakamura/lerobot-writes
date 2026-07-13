@@ -92,34 +92,35 @@ class ChunkedSmoother:
     """アクションチャンクで先読みする統合版 progress の表示用平滑化。
 
     統合版の7次元目はチャンク内では「未来の progress の予測」なので、
-    チャンク実行中に上振れし、再推論のたびに下方修正される
+    チャンク実行中に上振れし、再推論のたびに下方修正されうる
     (実機ログの実測: 約1.8秒周期の整数倍・平均 -0.15〜-0.25)。
-    大きな下降の直後の値を「現在地」(anchor) として採用し、チャンク内は
-    anchor+margin で頭打ちした EMA を表示する。単調ホールドはしない
-    (ピークを保持すると書けていなくても 100% に張り付くため)。
+    生値の「直近チャンク1個分のローリング最小値」を現在地の推定として EMA 表示する。
+    先読みの上振れは最小値に現れず、下方修正は window に入った時点で反映される。
+    単調ホールドはしない (ピーク保持だと未完でも 100% に張り付くため)。
+
+    旧実装 (下方修正の直後だけ anchor を進めて anchor+margin で頭打ち) は、
+    予測が正確で下方修正が来ないと anchor が凍結して表示が進まなくなる
+    バグがあった (2026-07-13 実機で発生) ため、この方式に置き換えた。
     """
 
-    def __init__(self, ema: float = 0.8, drop: float = 0.08, margin: float = 0.08):
+    def __init__(self, ema: float = 0.8, window: int = 55):
+        from collections import deque
         self.ema = ema
-        self.drop = drop      # これ以上の下降を再推論による修正とみなす
-        self.margin = margin  # チャンク内で anchor から先に進んでよい幅
+        self.window = window  # チャンク長 (50) + 余裕。fps30 前提で約1.8秒
+        self._deque = deque
         self.reset()
 
     def reset(self):
         """エピソード開始時に呼ぶ"""
         self.smoothed = 0.0
         self._ema_val = None
-        self._prev = None
-        self._anchor = None
+        self._buf = self._deque(maxlen=self.window)
 
     def update(self, p: float) -> float:
-        if self._prev is not None and self._prev - p >= self.drop:
-            self._anchor = p  # 再推論直後 = 観測に基づく正直な現在推定
-        self._prev = p
-        cap = 1.0 if self._anchor is None else min(1.0, self._anchor + self.margin)
-        q = min(p, cap)
-        self._ema_val = q if self._ema_val is None else \
-            self.ema * self._ema_val + (1 - self.ema) * q
+        self._buf.append(p)
+        honest = min(self._buf)  # 直近チャンク分の最小値 = 先読みを除いた現在地
+        self._ema_val = honest if self._ema_val is None else \
+            self.ema * self._ema_val + (1 - self.ema) * honest
         self.smoothed = self._ema_val
         return self.smoothed
 
